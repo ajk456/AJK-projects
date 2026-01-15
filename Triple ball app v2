@@ -1,0 +1,354 @@
+import React, { useState, useEffect } from 'react';
+import { ArrowLeftRight, History, Edit3, Check, Trophy, Download } from 'lucide-react';
+
+const TripleBallPro = () => {
+  // --- AUTO-INJECT STYLES ---
+  useEffect(() => {
+    const script = document.createElement('script');
+    script.src = "https://cdn.tailwindcss.com";
+    document.head.appendChild(script);
+  }, []);
+
+  // --- STATE ---
+  const [currentSet, setCurrentSet] = useState(1);
+  const [setsWonA, setSetsWonA] = useState(0);
+  const [setsWonB, setSetsWonB] = useState(0);
+  const [gameWinner, setGameWinner] = useState(null); 
+  const [setWinner, setSetWinner] = useState(null);   
+  
+  const [scoreA, setScoreA] = useState(0);
+  const [scoreB, setScoreB] = useState(0);
+  
+  const [teamAName, setTeamAName] = useState("Home");
+  const [teamBName, setTeamBName] = useState("Visitor");
+  const [isEditing, setIsEditing] = useState(false);
+  
+  const [servingTeam, setServingTeam] = useState('A'); 
+  const [ballState, setBallState] = useState(0); // 0=Serve, 1=Toss1, 2=Toss2
+  
+  const [history, setHistory] = useState([]);
+  const [matchLog, setMatchLog] = useState([]);
+
+  // --- LOGIC ---
+
+  const checkSetWin = (newScoreA, newScoreB) => {
+    const limit = currentSet === 3 ? 15 : 25;
+    if (newScoreA >= limit && newScoreA - newScoreB >= 2) return 'A';
+    if (newScoreB >= limit && newScoreB - newScoreA >= 2) return 'B';
+    return null;
+  };
+
+  const getBallActionName = () => {
+      if (ballState === 0) return "Serve";
+      const receiver = servingTeam === 'A' ? teamBName : teamAName;
+      const server = servingTeam === 'A' ? teamAName : teamBName;
+      if (ballState === 1) return `Toss to ${receiver}`;
+      if (ballState === 2) return `Toss to ${server}`;
+      return "Unknown";
+  };
+
+  const handlePoint = (team) => {
+    if (gameWinner || setWinner) return; 
+
+    // 1. Snapshot History
+    setHistory([...history, {
+      scoreA, scoreB, servingTeam, ballState, 
+      currentSet, setsWonA, setsWonB, setWinner, gameWinner, matchLog
+    }]);
+
+    // 2. Log Stats
+    const newLogEntry = {
+        set: currentSet,
+        servingTeam: servingTeam === 'A' ? teamAName : teamBName,
+        action: getBallActionName(),
+        winner: team === 'A' ? teamAName : teamBName,
+        score: `${team === 'A' ? scoreA + 1 : scoreA}-${team === 'B' ? scoreB + 1 : scoreB}`
+    };
+    setMatchLog([...matchLog, newLogEntry]);
+
+    // 3. Update Score
+    let newA = scoreA;
+    let newB = scoreB;
+    if (team === 'A') newA = scoreA + 1;
+    else newB = scoreB + 1;
+
+    setScoreA(newA);
+    setScoreB(newB);
+
+    // 4. Check Set Win
+    const winner = checkSetWin(newA, newB);
+    if (winner) {
+      setSetWinner(winner);
+      return; 
+    }
+
+    // 5. TRIPLE BALL LOGIC (The Reverted "Yesterday" Version)
+    // This logic runs AFTER the score updates.
+    if (ballState === 0) {
+        // Move from Serve to Toss 1
+        setBallState(1);
+    } else if (ballState === 1) {
+        // Move from Toss 1 to Toss 2
+        setBallState(2);
+    } else if (ballState === 2) {
+        // Sequence Finished. Reset to Serve AND Switch Teams.
+        setBallState(0);
+        setServingTeam(prev => prev === 'A' ? 'B' : 'A');
+    }
+  };
+
+  const finalizeSet = () => {
+    if (setWinner === 'A') {
+      const newSets = setsWonA + 1;
+      setSetsWonA(newSets);
+      if (newSets === 2) {
+        setGameWinner('A');
+        setSetWinner(null);
+        return;
+      }
+    } else {
+      const newSets = setsWonB + 1;
+      setSetsWonB(newSets);
+      if (newSets === 2) {
+        setGameWinner('B');
+        setSetWinner(null);
+        return;
+      }
+    }
+    setCurrentSet(prev => prev + 1);
+    setScoreA(0);
+    setScoreB(0);
+    setBallState(0);
+    setSetWinner(null);
+    setServingTeam(prev => prev === 'A' ? 'B' : 'A');
+  };
+
+  const resetMatch = () => {
+    if(!window.confirm("Start a brand new match? This clears all scores.")) return;
+    setScoreA(0);
+    setScoreB(0);
+    setSetsWonA(0);
+    setSetsWonB(0);
+    setCurrentSet(1);
+    setGameWinner(null);
+    setSetWinner(null);
+    setBallState(0);
+    setHistory([]);
+    setMatchLog([]);
+  };
+
+  const handleUndo = () => {
+    if (history.length === 0) return;
+    const last = history[history.length - 1];
+    setScoreA(last.scoreA);
+    setScoreB(last.scoreB);
+    setServingTeam(last.servingTeam);
+    setBallState(last.ballState);
+    setCurrentSet(last.currentSet);
+    setSetsWonA(last.setsWonA);
+    setSetsWonB(last.setsWonB);
+    setSetWinner(last.setWinner);
+    setGameWinner(last.gameWinner);
+    setMatchLog(last.matchLog || []); 
+    setHistory(history.slice(0, -1));
+  };
+
+  const exportCSV = () => {
+    let csvContent = "data:text/csv;charset=utf-8,Set,Serving Team,Action,Point Winner,Score After\n";
+    matchLog.forEach(row => {
+        csvContent += `${row.set},${row.servingTeam},${row.action},${row.winner},${row.score}\n`;
+    });
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `triple_ball_stats_${new Date().toISOString().slice(0,10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+  };
+
+  const getBallLabel = () => {
+    const server = servingTeam === 'A' ? teamAName : teamBName;
+    const receiver = servingTeam === 'A' ? teamBName : teamAName;
+
+    // Standard Logic: 1 Serve, 2 Tosses
+    if (ballState === 0) return `SERVE: ${server.toUpperCase()}`;
+    if (ballState === 1) return `TOSS TO: ${receiver.toUpperCase()}`;
+    if (ballState === 2) return `TOSS TO: ${server.toUpperCase()}`;
+    return "";
+  };
+
+  return (
+    <div className="flex flex-col h-screen bg-gray-900 text-white font-sans overflow-hidden">
+      
+      {/* --- TOP BAR --- */}
+      <div className="bg-gray-800 p-2 flex justify-between items-center shadow-md z-20 h-14 shrink-0">
+        <button onClick={() => setIsEditing(!isEditing)} className="text-gray-400 hover:text-white px-2">
+          {isEditing ? <Check size={20}/> : <Edit3 size={20} />}
+        </button>
+        
+        <div className="flex items-center gap-4">
+          <div className="text-sm font-bold bg-gray-700 px-3 py-1 rounded-full whitespace-nowrap">
+            SET {currentSet} <span className="text-gray-400 font-normal ml-1">
+              (to {currentSet === 3 ? '15' : '25'})
+            </span>
+          </div>
+        </div>
+
+        <button onClick={resetMatch} className="text-xs font-bold text-red-400 border border-red-900 bg-red-900/20 px-3 py-1 rounded hover:bg-red-900/50 whitespace-nowrap">
+          RESET
+        </button>
+      </div>
+
+      {/* --- MAIN COURT AREA --- */}
+      <div className="flex-1 flex relative">
+        
+        {/* TEAM A (LEFT - BLUE) */}
+        <div className={`flex-1 flex flex-col items-center pt-6 relative transition-colors duration-500
+          ${servingTeam === 'A' ? 'bg-blue-600' : 'bg-blue-900'}
+        `}>
+          <div className="flex gap-1 mb-2">
+            <div className={`w-3 h-3 rounded-full ${setsWonA > 0 ? 'bg-yellow-400' : 'bg-blue-800'}`}/>
+            <div className={`w-3 h-3 rounded-full ${setsWonA > 1 ? 'bg-yellow-400' : 'bg-blue-800'}`}/>
+          </div>
+
+          {isEditing ? (
+             <input value={teamAName} onChange={e => setTeamAName(e.target.value)} className="text-black text-center p-1 rounded w-24 mb-2"/>
+          ) : (
+             <h2 className="text-xl md:text-2xl font-bold tracking-tight uppercase px-2 text-center truncate w-full">{teamAName}</h2>
+          )}
+
+          {/* SCORE - Moved Up */}
+          <div className="mt-2 text-[100px] md:text-[140px] leading-none font-bold font-mono">
+            {scoreA}
+          </div>
+
+          {servingTeam === 'A' && (
+             <div className="mt-4 bg-yellow-400 text-blue-900 px-4 py-1 rounded-full font-black text-sm shadow-lg animate-pulse flex items-center gap-2">
+               🏐 SERVING
+             </div>
+          )}
+          
+          {/* BUTTON - Moved Down & Made Smaller */}
+          <button 
+            onClick={() => handlePoint('A')}
+            className="absolute inset-x-4 bottom-4 h-20 bg-white/10 hover:bg-white/20 rounded-xl border-2 border-white/20 flex items-center justify-center active:scale-[0.99] transition-all"
+          >
+            <span className="text-2xl font-bold text-white/90">+ POINT</span>
+          </button>
+        </div>
+
+        {/* TEAM B (RIGHT - RED) */}
+        <div className={`flex-1 flex flex-col items-center pt-6 relative transition-colors duration-500
+          ${servingTeam === 'B' ? 'bg-red-600' : 'bg-red-900'}
+        `}>
+          <div className="flex gap-1 mb-2">
+            <div className={`w-3 h-3 rounded-full ${setsWonB > 0 ? 'bg-yellow-400' : 'bg-red-800'}`}/>
+            <div className={`w-3 h-3 rounded-full ${setsWonB > 1 ? 'bg-yellow-400' : 'bg-red-800'}`}/>
+          </div>
+
+           {isEditing ? (
+             <input value={teamBName} onChange={e => setTeamBName(e.target.value)} className="text-black text-center p-1 rounded w-24 mb-2"/>
+          ) : (
+             <h2 className="text-xl md:text-2xl font-bold tracking-tight uppercase px-2 text-center truncate w-full">{teamBName}</h2>
+          )}
+
+          {/* SCORE - Moved Up */}
+          <div className="mt-2 text-[100px] md:text-[140px] leading-none font-bold font-mono">
+            {scoreB}
+          </div>
+
+          {servingTeam === 'B' && (
+             <div className="mt-4 bg-yellow-400 text-red-900 px-4 py-1 rounded-full font-black text-sm shadow-lg animate-pulse flex items-center gap-2">
+               🏐 SERVING
+             </div>
+          )}
+
+           {/* BUTTON - Moved Down & Made Smaller */}
+          <button 
+            onClick={() => handlePoint('B')}
+            className="absolute inset-x-4 bottom-4 h-20 bg-white/10 hover:bg-white/20 rounded-xl border-2 border-white/20 flex items-center justify-center active:scale-[0.99] transition-all"
+          >
+            <span className="text-2xl font-bold text-white/90">+ POINT</span>
+          </button>
+        </div>
+
+        {/* --- CENTER OVERLAY (ACTION BOX) --- */}
+        {/* Positioned explicitly between score and buttons (bottom-32 area) */}
+        <div className="absolute bottom-32 left-1/2 transform -translate-x-1/2 flex flex-col items-center z-10 pointer-events-none w-full px-4">
+          <div className="bg-gray-900/95 backdrop-blur-md px-6 py-3 rounded-2xl shadow-2xl border border-gray-600 flex flex-col items-center min-w-[200px]">
+             
+             {/* Progress Dots */}
+             <div className="flex gap-3 mb-2">
+               {[0, 1, 2].map(step => (
+                 <div key={step} className={`w-4 h-4 rounded-full border-2 transition-all ${
+                   ballState === step 
+                    ? 'bg-yellow-400 border-yellow-400 scale-125' 
+                    : ballState > step ? 'bg-gray-500 border-gray-500' : 'border-gray-600'
+                 }`} />
+               ))}
+             </div>
+             
+             {/* Text Counter */}
+             <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">
+                Ball {ballState + 1} of 3
+             </div>
+             
+             {/* Action Text */}
+             <div className="text-lg font-black text-white whitespace-nowrap text-center leading-none">
+               {getBallLabel()}
+             </div>
+          </div>
+          
+          <button onClick={() => setServingTeam(prev => prev==='A'?'B':'A')} className="pointer-events-auto mt-2 bg-gray-800 p-2 rounded-full text-gray-400 hover:text-white border border-gray-600 shadow-lg">
+             <ArrowLeftRight size={16} />
+          </button>
+        </div>
+
+      </div>
+
+      {/* --- FOOTER --- */}
+      <div className="bg-gray-800 p-3 flex justify-center shrink-0 safe-area-bottom">
+         <button onClick={handleUndo} className="flex items-center gap-2 text-gray-400 hover:text-white text-sm">
+            <History size={16} /> Undo Last Action
+         </button>
+      </div>
+
+      {/* --- WINNER OVERLAY --- */}
+      {(setWinner || gameWinner) && (
+        <div className="absolute inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-white text-gray-900 p-6 rounded-2xl shadow-2xl text-center max-w-sm w-[90%] mx-auto">
+            <Trophy size={48} className={`mx-auto mb-4 ${gameWinner ? 'text-yellow-500' : 'text-blue-500'}`} />
+            <h2 className="text-2xl font-black uppercase mb-2">
+              {gameWinner ? 'MATCH WINNER' : 'SET COMPLETE'}
+            </h2>
+            <div className="text-lg font-bold text-gray-600 mb-6">
+              {setWinner === 'A' || gameWinner === 'A' ? teamAName : teamBName}
+            </div>
+            
+            {gameWinner && (
+               <button onClick={exportCSV} className="w-full py-3 mb-3 bg-green-600 hover:bg-green-500 text-white font-bold rounded-xl shadow-lg flex items-center justify-center gap-2">
+                 <Download size={20} /> Download Stats (CSV)
+               </button>
+            )}
+
+            {gameWinner ? (
+               <button onClick={resetMatch} className="w-full py-3 bg-yellow-500 text-black font-bold rounded-xl shadow-lg">
+                 Start New Match
+               </button>
+            ) : (
+               <button onClick={finalizeSet} className="w-full py-3 bg-blue-600 text-white font-bold rounded-xl shadow-lg">
+                 Start Set {currentSet + 1}
+               </button>
+            )}
+            <div className="mt-4 text-sm text-gray-400">
+               Final Score: {scoreA} - {scoreB}
+            </div>
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+};
+
+export default TripleBallPro;
