@@ -1,62 +1,71 @@
-import React, { useState, useEffect } from 'react';
-import { RotateCcw, ArrowLeftRight, History, Edit3, Check, Trophy, AlertCircle } from 'lucide-react';
+import React, { useState } from "react";
+import {
+  RotateCcw,
+  ArrowLeftRight,
+  History,
+  Edit3,
+  Check,
+  Trophy,
+} from "lucide-react";
 
 const TripleBallPro = () => {
   // --- STATE ---
-  
+
   // Match Context
-  const [currentSet, setCurrentSet] = useState(1); // 1, 2, or 3
+  const [currentSet, setCurrentSet] = useState(1);
   const [setsWonA, setSetsWonA] = useState(0);
   const [setsWonB, setSetsWonB] = useState(0);
-  const [gameWinner, setGameWinner] = useState(null); // 'A' or 'B' if match is over
-  const [setWinner, setSetWinner] = useState(null);   // 'A' or 'B' if current set is over
+  const [gameWinner, setGameWinner] = useState(null);
+  const [setWinner, setSetWinner] = useState(null);
 
   // Score
   const [scoreA, setScoreA] = useState(0);
   const [scoreB, setScoreB] = useState(0);
-  
+
   // Teams
   const [teamAName, setTeamAName] = useState("Home");
   const [teamBName, setTeamBName] = useState("Visitor");
   const [isEditing, setIsEditing] = useState(false);
 
   // Triple Ball Logic
-  const [servingTeam, setServingTeam] = useState('A'); 
+  const [servingTeam, setServingTeam] = useState("A");
   const [ballState, setBallState] = useState(0); // 0=Serve, 1=Toss Receive, 2=Toss Serve
-  const [serveWinner, setServeWinner] = useState(null);
 
   // History (Undo)
   const [history, setHistory] = useState([]);
 
-  // --- LOGIC: SCORING & SETS ---
+  // --- LOGIC ---
 
   const checkSetWin = (newScoreA, newScoreB) => {
     const limit = currentSet === 3 ? 15 : 25;
-    
-    // Check Team A Win
-    if (newScoreA >= limit && newScoreA - newScoreB >= 2) {
-      return 'A';
-    }
-    // Check Team B Win
-    if (newScoreB >= limit && newScoreB - newScoreA >= 2) {
-      return 'B';
-    }
+    if (newScoreA >= limit && newScoreA - newScoreB >= 2) return "A";
+    if (newScoreB >= limit && newScoreB - newScoreA >= 2) return "B";
     return null;
   };
 
   const handlePoint = (team) => {
-    if (gameWinner || setWinner) return; // Stop if game is paused/over
+    if (gameWinner || setWinner) return;
 
     // 1. Snapshot for Undo
-    setHistory([...history, {
-      scoreA, scoreB, servingTeam, ballState, serveWinner, 
-      currentSet, setsWonA, setsWonB, setWinner, gameWinner
-    }]);
+    setHistory([
+      ...history,
+      {
+        scoreA,
+        scoreB,
+        servingTeam,
+        ballState,
+        currentSet,
+        setsWonA,
+        setsWonB,
+        setWinner,
+        gameWinner,
+      },
+    ]);
 
-    // 2. Calculate new score
+    // 2. Update Score
     let newA = scoreA;
     let newB = scoreB;
-    if (team === 'A') newA = scoreA + 1;
+    if (team === "A") newA = scoreA + 1;
     else newB = scoreB + 1;
 
     setScoreA(newA);
@@ -66,63 +75,64 @@ const TripleBallPro = () => {
     const winner = checkSetWin(newA, newB);
     if (winner) {
       setSetWinner(winner);
-      return; // Stop triple ball rotation logic if set is won
+      return;
     }
 
-    // 4. Triple Ball Rotation Logic
+    // 4. Triple Ball Sequence Logic
     if (ballState === 0) {
-      setServeWinner(team);
-      setBallState(1); 
+      // Move to Toss 1
+      setBallState(1);
     } else if (ballState === 1) {
-      setBallState(2); 
+      // Move to Toss 2
+      setBallState(2);
     } else if (ballState === 2) {
-      finishSequence(team);
+      // Sequence Finished
+      finishSequence();
     }
   };
 
-  const finishSequence = (lastPointWinner) => {
-    // Logic: If the server lost the FIRST ball (serve), they lose the serve.
-    // If they won the first ball, they keep the serve regardless of the other 2 balls.
-    if (serveWinner && serveWinner !== servingTeam) {
-      setServingTeam(prev => prev === 'A' ? 'B' : 'A');
-    }
+  const finishSequence = () => {
+    // UPDATED LOGIC: Automatic rotation every 3 balls.
+    // It does not matter who won the points.
+    setServingTeam((prev) => (prev === "A" ? "B" : "A"));
+
+    // Reset to Ball 1 (Serve)
     setBallState(0);
-    setServeWinner(null);
   };
 
   const finalizeSet = () => {
-    // Determine who won the set that just finished
-    if (setWinner === 'A') {
+    // Record Set Win
+    if (setWinner === "A") {
       const newSets = setsWonA + 1;
       setSetsWonA(newSets);
       if (newSets === 2) {
-        setGameWinner('A');
-        setSetWinner(null); // Clear set winner so we show Match Winner UI
+        setGameWinner("A");
+        setSetWinner(null);
         return;
       }
     } else {
       const newSets = setsWonB + 1;
       setSetsWonB(newSets);
       if (newSets === 2) {
-        setGameWinner('B');
+        setGameWinner("B");
         setSetWinner(null);
         return;
       }
     }
 
     // Prepare Next Set
-    setCurrentSet(prev => prev + 1);
+    setCurrentSet((prev) => prev + 1);
     setScoreA(0);
     setScoreB(0);
     setBallState(0);
-    setServeWinner(null);
     setSetWinner(null);
-    // Usually loser serves, or swap. Let's swap serve to be fair.
-    setServingTeam(prev => prev === 'A' ? 'B' : 'A');
+    // Swap server for start of new set
+    setServingTeam((prev) => (prev === "A" ? "B" : "A"));
   };
 
   const resetMatch = () => {
-    if(!window.confirm("Start a brand new match? This clears all scores.")) return;
+    if (!window.confirm("Start a brand new match? This clears all scores."))
+      return;
     setScoreA(0);
     setScoreB(0);
     setSetsWonA(0);
@@ -141,7 +151,6 @@ const TripleBallPro = () => {
     setScoreB(last.scoreB);
     setServingTeam(last.servingTeam);
     setBallState(last.ballState);
-    setServeWinner(last.serveWinner);
     setCurrentSet(last.currentSet);
     setSetsWonA(last.setsWonA);
     setSetsWonB(last.setsWonB);
@@ -152,54 +161,77 @@ const TripleBallPro = () => {
 
   // --- UI HELPERS ---
   const getBallLabel = () => {
-    if (ballState === 0) return "SERVE";
-    const receiver = servingTeam === 'A' ? teamBName : teamAName;
-    const server = servingTeam === 'A' ? teamAName : teamBName;
-    if (ballState === 1) return `TOSS: ${receiver}`;
-    if (ballState === 2) return `TOSS: ${server}`;
+    // UPDATED: Now explicitly names the team serving
+    const server = servingTeam === "A" ? teamAName : teamBName;
+    const receiver = servingTeam === "A" ? teamBName : teamAName;
+
+    if (ballState === 0) return `SERVE: ${server.toUpperCase()}`;
+    if (ballState === 1) return `TOSS TO: ${receiver.toUpperCase()}`;
+    if (ballState === 2) return `TOSS TO: ${server.toUpperCase()}`;
     return "";
   };
 
   return (
     <div className="flex flex-col h-screen bg-gray-900 text-white font-sans overflow-hidden">
-      
       {/* --- TOP BAR: Match Info --- */}
       <div className="bg-gray-800 p-2 flex justify-between items-center shadow-md z-20">
-        <button onClick={() => setIsEditing(!isEditing)} className="text-gray-400 hover:text-white px-2">
-          {isEditing ? <Check size={20}/> : <Edit3 size={20} />}
+        <button
+          onClick={() => setIsEditing(!isEditing)}
+          className="text-gray-400 hover:text-white px-2"
+        >
+          {isEditing ? <Check size={20} /> : <Edit3 size={20} />}
         </button>
-        
+
         <div className="flex items-center gap-4">
           <div className="text-sm font-bold bg-gray-700 px-3 py-1 rounded-full">
-            SET {currentSet} <span className="text-gray-400 font-normal ml-1">
-              (to {currentSet === 3 ? '15' : '25'})
+            SET {currentSet}{" "}
+            <span className="text-gray-400 font-normal ml-1">
+              (to {currentSet === 3 ? "15" : "25"})
             </span>
           </div>
         </div>
 
-        <button onClick={resetMatch} className="text-xs font-bold text-red-400 border border-red-900 bg-red-900/20 px-3 py-1 rounded hover:bg-red-900/50">
+        <button
+          onClick={resetMatch}
+          className="text-xs font-bold text-red-400 border border-red-900 bg-red-900/20 px-3 py-1 rounded hover:bg-red-900/50"
+        >
           NEW MATCH
         </button>
       </div>
 
       {/* --- MAIN COURT AREA (Split 50/50) --- */}
       <div className="flex-1 flex relative">
-        
         {/* TEAM A (LEFT - BLUE) */}
-        <div className={`flex-1 flex flex-col items-center justify-start pt-8 relative transition-colors duration-500
-          ${servingTeam === 'A' ? 'bg-blue-600' : 'bg-blue-900'}
-        `}>
+        <div
+          className={`flex-1 flex flex-col items-center justify-start pt-8 relative transition-colors duration-500
+          ${servingTeam === "A" ? "bg-blue-600" : "bg-blue-900"}
+        `}
+        >
           {/* Sets Won Dots */}
           <div className="flex gap-1 mb-2">
-            <div className={`w-3 h-3 rounded-full ${setsWonA > 0 ? 'bg-yellow-400' : 'bg-blue-800'}`}/>
-            <div className={`w-3 h-3 rounded-full ${setsWonA > 1 ? 'bg-yellow-400' : 'bg-blue-800'}`}/>
+            <div
+              className={`w-3 h-3 rounded-full ${
+                setsWonA > 0 ? "bg-yellow-400" : "bg-blue-800"
+              }`}
+            />
+            <div
+              className={`w-3 h-3 rounded-full ${
+                setsWonA > 1 ? "bg-yellow-400" : "bg-blue-800"
+              }`}
+            />
           </div>
 
           {/* Name */}
           {isEditing ? (
-             <input value={teamAName} onChange={e => setTeamAName(e.target.value)} className="text-black text-center p-1 rounded w-32"/>
+            <input
+              value={teamAName}
+              onChange={(e) => setTeamAName(e.target.value)}
+              className="text-black text-center p-1 rounded w-32"
+            />
           ) : (
-             <h2 className="text-2xl font-bold tracking-tight uppercase">{teamAName}</h2>
+            <h2 className="text-2xl font-bold tracking-tight uppercase px-2 text-center">
+              {teamAName}
+            </h2>
           )}
 
           {/* Score */}
@@ -207,16 +239,16 @@ const TripleBallPro = () => {
             {scoreA}
           </div>
 
-          {/* Serve Indicator */}
-          {servingTeam === 'A' && (
-             <div className="mt-4 bg-yellow-400 text-blue-900 px-4 py-1 rounded-full font-bold text-sm shadow-lg animate-bounce">
-               🏐 SERVING
-             </div>
+          {/* Serve Indicator - Only shows if A is serving */}
+          {servingTeam === "A" && (
+            <div className="mt-4 bg-yellow-400 text-blue-900 px-6 py-2 rounded-full font-black text-lg shadow-lg animate-pulse flex items-center gap-2">
+              🏐 SERVING
+            </div>
           )}
-          
-          {/* Click Area for Point (Covers whole side essentially) */}
-          <button 
-            onClick={() => handlePoint('A')}
+
+          {/* Click Area for Point */}
+          <button
+            onClick={() => handlePoint("A")}
             className="absolute inset-x-4 bottom-4 top-64 bg-white/10 hover:bg-white/20 rounded-2xl border-2 border-white/20 flex items-end justify-center pb-8 active:scale-[0.98] transition-all"
           >
             <span className="text-3xl font-bold text-white/80">+ POINT</span>
@@ -224,20 +256,36 @@ const TripleBallPro = () => {
         </div>
 
         {/* TEAM B (RIGHT - RED) */}
-        <div className={`flex-1 flex flex-col items-center justify-start pt-8 relative transition-colors duration-500
-          ${servingTeam === 'B' ? 'bg-red-600' : 'bg-red-900'}
-        `}>
+        <div
+          className={`flex-1 flex flex-col items-center justify-start pt-8 relative transition-colors duration-500
+          ${servingTeam === "B" ? "bg-red-600" : "bg-red-900"}
+        `}
+        >
           {/* Sets Won Dots */}
           <div className="flex gap-1 mb-2">
-            <div className={`w-3 h-3 rounded-full ${setsWonB > 0 ? 'bg-yellow-400' : 'bg-red-800'}`}/>
-            <div className={`w-3 h-3 rounded-full ${setsWonB > 1 ? 'bg-yellow-400' : 'bg-red-800'}`}/>
+            <div
+              className={`w-3 h-3 rounded-full ${
+                setsWonB > 0 ? "bg-yellow-400" : "bg-red-800"
+              }`}
+            />
+            <div
+              className={`w-3 h-3 rounded-full ${
+                setsWonB > 1 ? "bg-yellow-400" : "bg-red-800"
+              }`}
+            />
           </div>
 
-           {/* Name */}
-           {isEditing ? (
-             <input value={teamBName} onChange={e => setTeamBName(e.target.value)} className="text-black text-center p-1 rounded w-32"/>
+          {/* Name */}
+          {isEditing ? (
+            <input
+              value={teamBName}
+              onChange={(e) => setTeamBName(e.target.value)}
+              className="text-black text-center p-1 rounded w-32"
+            />
           ) : (
-             <h2 className="text-2xl font-bold tracking-tight uppercase">{teamBName}</h2>
+            <h2 className="text-2xl font-bold tracking-tight uppercase px-2 text-center">
+              {teamBName}
+            </h2>
           )}
 
           {/* Score */}
@@ -245,16 +293,16 @@ const TripleBallPro = () => {
             {scoreB}
           </div>
 
-          {/* Serve Indicator */}
-          {servingTeam === 'B' && (
-             <div className="mt-4 bg-yellow-400 text-red-900 px-4 py-1 rounded-full font-bold text-sm shadow-lg animate-bounce">
-               🏐 SERVING
-             </div>
+          {/* Serve Indicator - Only shows if B is serving */}
+          {servingTeam === "B" && (
+            <div className="mt-4 bg-yellow-400 text-red-900 px-6 py-2 rounded-full font-black text-lg shadow-lg animate-pulse flex items-center gap-2">
+              🏐 SERVING
+            </div>
           )}
 
           {/* Click Area for Point */}
-          <button 
-            onClick={() => handlePoint('B')}
+          <button
+            onClick={() => handlePoint("B")}
             className="absolute inset-x-4 bottom-4 top-64 bg-white/10 hover:bg-white/20 rounded-2xl border-2 border-white/20 flex items-end justify-center pb-8 active:scale-[0.98] transition-all"
           >
             <span className="text-3xl font-bold text-white/80">+ POINT</span>
@@ -262,73 +310,97 @@ const TripleBallPro = () => {
         </div>
 
         {/* --- CENTER OVERLAY: Triple Ball Sequence --- */}
-        <div className="absolute top-[45%] left-1/2 transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center z-10 pointer-events-none">
-          <div className="bg-gray-900/90 backdrop-blur-md px-6 py-4 rounded-2xl shadow-2xl border border-gray-600 flex flex-col items-center">
-             <div className="flex gap-4 mb-3">
-               {[0, 1, 2].map(step => (
-                 <div key={step} className={`w-6 h-6 rounded-full border-2 transition-all ${
-                   ballState === step 
-                    ? 'bg-yellow-400 border-yellow-400 scale-125' 
-                    : ballState > step ? 'bg-gray-500 border-gray-500' : 'border-gray-600'
-                 }`} />
-               ))}
-             </div>
-             <div className="text-xs font-bold text-gray-400 uppercase tracking-widest">Action</div>
-             <div className="text-lg font-black text-white whitespace-nowrap">
-               {getBallLabel()}
-             </div>
+        <div className="absolute top-[45%] left-1/2 transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center z-10 pointer-events-none w-full">
+          <div className="bg-gray-900/95 backdrop-blur-md px-8 py-5 rounded-2xl shadow-2xl border border-gray-600 flex flex-col items-center min-w-[200px]">
+            {/* 3 Dots */}
+            <div className="flex gap-4 mb-4">
+              {[0, 1, 2].map((step) => (
+                <div
+                  key={step}
+                  className={`w-6 h-6 rounded-full border-2 transition-all ${
+                    ballState === step
+                      ? "bg-yellow-400 border-yellow-400 scale-125"
+                      : ballState > step
+                      ? "bg-gray-500 border-gray-500"
+                      : "border-gray-600"
+                  }`}
+                />
+              ))}
+            </div>
+
+            {/* Action Text */}
+            <div className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">
+              Current Action
+            </div>
+            <div className="text-xl font-black text-white whitespace-nowrap text-center">
+              {getBallLabel()}
+            </div>
           </div>
-          
+
           {/* Manual Serve Swap (Small Button) */}
-          <button onClick={() => setServingTeam(prev => prev==='A'?'B':'A')} className="pointer-events-auto mt-4 bg-gray-800 p-2 rounded-full text-gray-400 hover:text-white border border-gray-600">
-             <ArrowLeftRight size={16} />
+          <button
+            onClick={() => setServingTeam((prev) => (prev === "A" ? "B" : "A"))}
+            className="pointer-events-auto mt-4 bg-gray-800 p-2 rounded-full text-gray-400 hover:text-white border border-gray-600"
+          >
+            <ArrowLeftRight size={16} />
           </button>
         </div>
-
       </div>
 
       {/* --- FOOTER: Undo --- */}
       <div className="bg-gray-800 p-3 flex justify-center">
-         <button onClick={handleUndo} className="flex items-center gap-2 text-gray-400 hover:text-white text-sm">
-            <History size={16} /> Undo Last Action
-         </button>
+        <button
+          onClick={handleUndo}
+          className="flex items-center gap-2 text-gray-400 hover:text-white text-sm"
+        >
+          <History size={16} /> Undo Last Action
+        </button>
       </div>
 
       {/* --- OVERLAYS: Set/Match Winner --- */}
       {(setWinner || gameWinner) && (
         <div className="absolute inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-white text-gray-900 p-8 rounded-2xl shadow-2xl text-center max-w-sm w-full mx-4">
-            
-            <Trophy size={64} className={`mx-auto mb-4 ${gameWinner ? 'text-yellow-500' : 'text-blue-500'}`} />
-            
+            <Trophy
+              size={64}
+              className={`mx-auto mb-4 ${
+                gameWinner ? "text-yellow-500" : "text-blue-500"
+              }`}
+            />
+
             <h2 className="text-3xl font-black uppercase mb-2">
-              {gameWinner ? 'MATCH WINNER' : 'SET COMPLETE'}
+              {gameWinner ? "MATCH WINNER" : "SET COMPLETE"}
             </h2>
-            
+
             <div className="text-xl font-bold text-gray-600 mb-8">
-              {setWinner === 'A' || gameWinner === 'A' ? teamAName : teamBName}
+              {setWinner === "A" || gameWinner === "A" ? teamAName : teamBName}
             </div>
 
             {gameWinner ? (
-               <button onClick={resetMatch} className="w-full py-4 bg-yellow-500 hover:bg-yellow-400 text-black font-bold rounded-xl text-xl shadow-lg">
-                 Start New Match
-               </button>
+              <button
+                onClick={resetMatch}
+                className="w-full py-4 bg-yellow-500 hover:bg-yellow-400 text-black font-bold rounded-xl text-xl shadow-lg"
+              >
+                Start New Match
+              </button>
             ) : (
-               <button onClick={finalizeSet} className="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl text-xl shadow-lg">
-                 Start Set {currentSet + 1}
-               </button>
+              <button
+                onClick={finalizeSet}
+                className="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl text-xl shadow-lg"
+              >
+                Start Set {currentSet + 1}
+              </button>
             )}
-            
-            <div className="mt-4 text-sm text-gray-400">
-               Score: {scoreA} - {scoreB}
-            </div>
 
+            <div className="mt-4 text-sm text-gray-400">
+              Final Score: {scoreA} - {scoreB}
+            </div>
           </div>
         </div>
       )}
-
     </div>
   );
 };
 
 export default TripleBallPro;
+
